@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 
 
 
-class black_scholes():
+class black_scholes:
 
     def __init__(self,S, K, T, r, q, sigma):
         self.S = S
@@ -27,25 +27,13 @@ class black_scholes():
         self.sigma = sigma
         self.d1 = (np.log(S / K) + (r - q + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
         self.d2 = (np.log(S / K) + (r - q - 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
-        self.call = self.call()
-        self.put = self.put()
-        self.call_delta = self.delta('call')
-        self.put_delta = self.delta('put')
-        self.gamma = self.gamma()
-        self.vega = self.vega()
-        self.call_theta = self.theta('call')
-        self.put_theta = self.theta('put')
-        self.call_rho = self.rho('call')
-        self.put_rho = self.rho('put')
 
-
-    def call(self):
-        call = (self.S * np.exp(-self.q * self.T) * si.norm.cdf(self.d1, 0.0, 1.0) - self.K * np.exp(-self.r * self.T) * si.norm.cdf(self.d2, 0.0, 1.0))
-        return call
-
-    def put(self):
-        put = (self.K * np.exp(-self.r * self.T) * si.norm.cdf(-self.d2, 0.0, 1.0) - self.S * np.exp(-self.q * self.T) * si.norm.cdf(-self.d1, 0.0, 1.0))
-        return put
+    def price(self,option_type):
+        if option_type == 'call':
+            price = self.S * np.exp(-self.q * self.T) * si.norm.cdf(self.d1, 0.0, 1.0) - self.K * np.exp(-self.r * self.T) * si.norm.cdf(self.d2, 0.0, 1.0)
+        elif option_type == 'put':
+            price = self.K * np.exp(-self.r * self.T) * si.norm.cdf(-self.d2, 0.0, 1.0) - self.S * np.exp(-self.q * self.T) * si.norm.cdf(-self.d1, 0.0, 1.0)
+        return price
 
     def delta(self,option_type):
         if option_type == 'call':
@@ -80,6 +68,49 @@ class black_scholes():
 
         return rho
 
+class call(black_scholes):
+    def __init__(self,S, K, T, r, q, sigma):
+        super().__init__(S, K, T, r, q, sigma)
+        self.price = black_scholes.price(self,'call')
+        self.delta = black_scholes.delta(self,'call')
+        self.gamma = black_scholes.gamma(self)
+        self.vega = black_scholes.vega(self)
+        self.theta = black_scholes.theta(self,'call')
+        self.rho = black_scholes.rho(self,'call')
+        self.leverage = self.S / self.price * self.delta # effective gearing
+
+class put(black_scholes):
+    def __init__(self,S, K, T, r, q, sigma):
+        super().__init__(S, K, T, r, q, sigma)
+        self.price = black_scholes.price(self,'put')
+        self.delta = black_scholes.delta(self,'put')
+        self.gamma = black_scholes.gamma(self)
+        self.vega = black_scholes.vega(self)
+        self.theta = black_scholes.theta(self,'put')
+        self.rho = black_scholes.rho(self,'put')
+        self.leverage = self.S / self.price * self.delta # effective gearing = leverage * delta
 
 
-black_scholes(25182.15,25200,1/12,0.0001,0.04,0.26).call_delta
+
+S,K,T,r,q,sigma = 25089.17,25000,75/365,0.0001,0.04,0.2605
+
+long_put_0 = put(S,K,T,r,q,sigma)
+short_call_0 = call(S,K,T,r,q,sigma)
+
+port_value_0 = short_call_0.price - long_put_0.price
+
+
+S1,T1 = 26000,30/365
+
+long_put_1 = put(S1,K,T1,r,q,sigma)
+short_call_1 = call(S1,K,T1,r,q,sigma)
+
+port_value_1 = short_call_1.price - long_put_1.price
+
+profit = port_value_1 - port_value_0
+
+
+print(port_value_1)
+print(port_value_0)
+
+print(profit)
