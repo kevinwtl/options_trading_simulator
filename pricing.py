@@ -7,18 +7,9 @@ import random
 import matplotlib.pyplot as plt
 
 
-# avg = 1
-# std_dev = .1
-# num_reps = 500
-# num_simulations = 1000
-
-# pct_to_target = np.random.normal(avg, std_dev, num_reps).round(2)
-
-
-
 class black_scholes:
 
-    def __init__(self,S, K, T, r, q, sigma):
+    def __init__(self, S, K, T, r, q, sigma):
         self.S = S
         self.K = K
         self.T = T
@@ -80,9 +71,8 @@ class black_scholes:
         print("Theta: " + str("{:.2f}".format(self.theta)) + " (daily)")
         print("Rho: " + str("{:.2f}".format(self.rho)) + " (per % of Interest Rate)")
 
-
 class call(black_scholes):
-    def __init__(self,S, K, T, r, q, sigma):
+    def __init__(self, S, K, T, r, q, sigma):
         super().__init__(S, K, T, r, q, sigma)
         self.price = black_scholes.price(self,'call')
         self.delta = black_scholes.delta(self,'call')
@@ -94,7 +84,7 @@ class call(black_scholes):
         self.exposure = black_scholes.exposure(self)
 
 class put(black_scholes):
-    def __init__(self,S, K, T, r, q, sigma):
+    def __init__(self, S, K, T, r, q, sigma):
         super().__init__(S, K, T, r, q, sigma)
         self.price = black_scholes.price(self,'put')
         self.delta = black_scholes.delta(self,'put')
@@ -105,26 +95,80 @@ class put(black_scholes):
         self.leverage = black_scholes.leverage(self)
         self.exposure = black_scholes.exposure(self)
 
+class strategy(call,put):
+    def __init__(self, options = [], strategy = ''):
+        super().__init__(S, K, T, r, q, sigma)
+
+        # Distinguish between call / put options
+        call_count, put_cout, calls, puts = 0,0,[],[]
+        for i in options:
+            if i.__class__.__name__ == 'call':
+                calls.append(i)
+            elif i.__class__.__name__ == 'put':
+                puts.append(i)
+
+
+        if strategy == 'straddle':
+            self.price = calls[0].price + puts[0].price
+            self.delta = calls[0].delta + puts[0].delta
+            self.gamma
+
+        if strategy == ''
+
+
+def strategy(S1,K,T1,r,q,sigma): #Straddle
+    long_call = call(S1,K,T1,r,q,sigma)
+    long_put = put(S1,K,T1,r,q,sigma)
+    price = long_call.price + long_put.price
+
+    return price
+
+
+def montecarlo(option, n):
+    # Only for long options currently
+    sns.set_style('whitegrid')
+    pct_chg = np.random.normal(1, option.sigma * option.T, n)
+    ms_S = pct_chg * option.S
+    ms_payoff =  ms_S - option.K - option.price
+    ms_payoff[ms_payoff<0] = 0
+
+    return pd.DataFrame({'St' : ms_S, 'Payoff' : ms_payoff})
+
+
+def payoff_diagram(df):
+
+    t = np.arange(0,len(df)) # number of values on the x axis
+    fig, ax = plt.subplots() # Create the plot objects
+    ax.scatter(df['St'], df['Payoff'],s = 5) # Input the data for the graph and plot
+    ax.set_xlabel('St')
+    ax.set_ylabel('Payoff')
+
+    plt.show()
+
+
+
+
+
+
+
+
 # Options at interception
-S,K,T,r,q,sigma = 25089.17,25000,75/365,0.0001,0.04,0.2605
+S,K,T,r,q,sigma = 18.8,18.5,75/365,0.003,0,0.2605
 
-call(S,K,T,r,q,sigma).calculate()
 
-long_put_0 = put(S,K,T,r,q,sigma)
-short_call_0 = call(S,K,T,r,q,sigma)
-short_call_0.calculate()
-port_value_0 = short_call_0.price - long_put_0.price
 
-port_exposure = 
+long_put = put(S,K,T,r,q,sigma)
+long_call = call(S,K,T,r,q,sigma)
 
-# Options at T > 0
-S1,T1 = 24000,30/365
+strategy([long_put, long_call]).price
 
-long_put_1 = put(S1,K,T1,r,q,sigma)
-short_call_1 = call(S1,K,T1,r,q,sigma)
 
-port_value_1 = short_call_1.price - long_put_1.price
+## Payoff diagram
+df = montecarlo(long_put,0.1,500)
 
-# Calculate Profit
-profit = port_value_1 - port_value_0
+payoff_diagram(df)
+
+
+
+
 
