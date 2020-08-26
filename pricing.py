@@ -60,13 +60,26 @@ class black_scholes:
         return theta
 
     def rho(self,option_type):
-
         if option_type == 'call':
             rho = 1 * self.K * self.T * np.exp(-(self.r * self.T)) * 0.01 * norm.cdf (1 * self.d2)
         elif option_type == 'put':
             rho = -1 * self.K * self.T * np.exp(-(self.r * self.T)) * 0.01 * norm.cdf (-1 * self.d2)
-
         return rho
+
+    def leverage(self): # Effective gearing
+        return self.S * self.delta / self.price
+
+    def exposure(self): # Delta-adjusted notional value
+        return self.S * self.delta / self.S
+
+    def calculate(self):
+        print("Price: " + str("{:.2f}".format(self.price)))
+        print("Delta: " + str("{:.2f}".format(self.delta)))
+        print("Gamma: " + str("{:.2f}".format(self.gamma)) + " (per % of Spot)")
+        print("Vega: " + str("{:.2f}".format(self.vega)) + " (per % of IV)")
+        print("Theta: " + str("{:.2f}".format(self.theta)) + " (daily)")
+        print("Rho: " + str("{:.2f}".format(self.rho)) + " (per % of Interest Rate)")
+
 
 class call(black_scholes):
     def __init__(self,S, K, T, r, q, sigma):
@@ -77,7 +90,8 @@ class call(black_scholes):
         self.vega = black_scholes.vega(self)
         self.theta = black_scholes.theta(self,'call')
         self.rho = black_scholes.rho(self,'call')
-        self.leverage = self.S / self.price * self.delta # effective gearing
+        self.leverage = black_scholes.leverage(self)
+        self.exposure = black_scholes.exposure(self)
 
 class put(black_scholes):
     def __init__(self,S, K, T, r, q, sigma):
@@ -88,29 +102,29 @@ class put(black_scholes):
         self.vega = black_scholes.vega(self)
         self.theta = black_scholes.theta(self,'put')
         self.rho = black_scholes.rho(self,'put')
-        self.leverage = self.S / self.price * self.delta # effective gearing = leverage * delta
+        self.leverage = black_scholes.leverage(self)
+        self.exposure = black_scholes.exposure(self)
 
-
-
+# Options at interception
 S,K,T,r,q,sigma = 25089.17,25000,75/365,0.0001,0.04,0.2605
+
+call(S,K,T,r,q,sigma).calculate()
 
 long_put_0 = put(S,K,T,r,q,sigma)
 short_call_0 = call(S,K,T,r,q,sigma)
-
+short_call_0.calculate()
 port_value_0 = short_call_0.price - long_put_0.price
 
+port_exposure = 
 
-S1,T1 = 26000,30/365
+# Options at T > 0
+S1,T1 = 24000,30/365
 
 long_put_1 = put(S1,K,T1,r,q,sigma)
 short_call_1 = call(S1,K,T1,r,q,sigma)
 
 port_value_1 = short_call_1.price - long_put_1.price
 
+# Calculate Profit
 profit = port_value_1 - port_value_0
 
-
-print(port_value_1)
-print(port_value_0)
-
-print(profit)
