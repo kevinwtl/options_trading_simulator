@@ -92,10 +92,10 @@ class call(black_scholes):
         self.exposure = black_scholes.exposure(self)
         
     def payoff(self,St):
-        return np.where(St > self.S, St - self.S, 0) - self.price
+        return np.where(St > self.K, St - self.K, 0)
     
     def profit(self,St):
-        return np.where(St > self.S, St - self.S, 0)
+        return np.where(St > self.K, St - self.K, 0) - self.price
 
 class put(black_scholes):
     def __init__(self, S, K, T, r, q, sigma):
@@ -112,10 +112,10 @@ class put(black_scholes):
         self.exposure = black_scholes.exposure(self)
 
     def payoff(self,St):
-        return np.where(St < self.S, self.S - St, 0)
+        return np.where(St < self.K, self.K - St, 0)
     
     def profit(self,St):
-        return np.where(St < self.S, self.S - St, 0) - self.price
+        return np.where(St < self.K, self.K - St, 0) - self.price
 
 class straddle(call,put):
     def __init__(self, S, K, T, r, q, sigma):
@@ -175,23 +175,7 @@ class spread(call,put):
         return self.option_1.payoff(St) - self.option_2.payoff(St)
     
     def profit(self,St):
-        return self.option_1.payoff(St) - self.option_2.payoff(St) - self.price
-
-
-# Options at interception
-S,K,T,r,q,sigma = 23.65,24,29/365,0.003,0,0.6951
-
-option = straddle(S=23.65,K=24,T=29/365,r=0.03,q=0,sigma=0.7)
-option = spread(S=23.65,K1=23.5,K2=24,T=29/365,r=0.03,q=0,sigma=0.7,option_type='put')
-
-long_put = put(S,K,T,r,q,sigma)
-long_call = call(S,K,T,r,q,sigma)
-
-
-
-
-## Payoff diagram
-
+        return self.option_1.payoff(St) - self.option_2.payoff(St) - self.option_1.price + self.option_2.price
 
 def payoff_diagram(option, n):
 
@@ -201,7 +185,7 @@ def payoff_diagram(option, n):
         pct_chg = np.random.normal(1, option.sigma * option.T, n)
         ms_S = pct_chg * option.S
         ms_profit = option.profit(ms_S)
-        return pd.DataFrame({'St' : ms_S, 'Profit' : ms_profit})
+        return pd.DataFrame({'St' : ms_S, 'Profit' : ms_profit}).sort_values('St').reset_index(drop = True)
     
     df = montecarlo(option, n)
     t = np.arange(0,len(df)) # number of values on the x axis
@@ -211,6 +195,35 @@ def payoff_diagram(option, n):
     ax.set_ylabel('Profit')
 
     plt.show()
+    print(df)
 
 
-payoff_diagram(spread(S=24.65,K1=22,K2=26,T=29/365,r=0.03,q=0,sigma=0.3,option_type='call'),n = 2500)
+
+# Options at interception
+
+option = spread(S=24.65,K1=27,K2=22,T=29/365,r=0.03,q=0,sigma=0.7,option_type='call')
+
+payoff_diagram(option,n = 2500)
+
+a = option.option_1
+b = option.option_2
+
+a.price - b.price # cost of the strategy
+
+# payoff
+St = 27
+b.K
+a.payoff(St)
+b.payoff(St)
+
+
+a.profit(St)
+b.profit(St)
+
+
+
+
+payoff_diagram(call(S=24.65,K=25,T=29/365,r=0.03,q=0,sigma=0.3),n = 2500)
+
+long_call.calculate()
+short_call.calculate()
