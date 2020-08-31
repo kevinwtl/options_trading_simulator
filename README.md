@@ -2,7 +2,7 @@
 
 ## Introduction
 This repo uses Black-Scholes Model as the foundation.
-It generates payoff diagrams and evaluate strategies using Monte Carlo Simulation.
+It generates payoff diagrams and evaluates strategies using Monte Carlo Simulation.
 
 
 ## Examples
