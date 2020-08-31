@@ -3,15 +3,18 @@ import numpy as np
 import seaborn as sns
 import scipy.stats as si
 from scipy.stats import norm
+from scipy.optimize import minimize
 import random
 import matplotlib.pyplot as plt
-'''
-TODO: payoff of shorted options are not correctly reflected
-'''
 
+'''
+TODO:
+1. Calculate the expected profit, probability of making profits, breakeven
+2. Compare between options (costs, expected payoff)
+3. Calculate IV from current option prices
+'''
 
 class black_scholes:
-
     def __init__(self, S, K, T, r, q, sigma):
         self.S = S
         self.K = K
@@ -149,19 +152,21 @@ class spread(call,put):
     option_type = call or put
     '''
     def __init__(self, S, K1, K2, T, r, q, sigma, option_type):
-        super().__init__(S, K, T, r, q, sigma)
+        super().__init__(S, np.nan, T, r, q, sigma)
+        
+        self.direction = 'Bull' if K1 < K2 else 'Bear'
         
         if option_type == 'call':
-            self.strategy_name = 'Call Spread @ K1 = ' + str(K1) + ', K2 = ' + str(K2)
+            self.strategy_name = self.direction + ' Call Spread @ K1 = ' + str(K1) + ', K2 = ' + str(K2)
             option_1 = call(S, K1, T, r, q, sigma) # Long call
             option_2 = call(S, K2, T, r, q, sigma) # Short call
         elif option_type == 'put':
-            self.strategy_name = 'Put Spread @ K1 = ' + str(K1) + ', K2 = ' + str(K2)
+            self.strategy_name = self.direction + ' Put Spread @ K1 = ' + str(K1) + ', K2 = ' + str(K2)
             option_1 = put(S, K1, T, r, q, sigma) # Long Put
             option_2 = put(S, K2, T, r, q, sigma) # Short Put
         
         self.option_1 = option_1
-        self.option_2 = option_2        
+        self.option_2 = option_2     
         self.price = option_1.price - option_2.price
         self.delta = option_1.delta - option_2.delta
         self.gamma = option_1.gamma - option_2.gamma
@@ -195,35 +200,16 @@ def payoff_diagram(option, n):
     ax.set_ylabel('Profit')
 
     plt.show()
-    print(df)
 
 
+example_1 = call(S=530,K=540,T=29/365,r=0.03,q=0,sigma=0.48)
+example_1.calculate()
+payoff_diagram(example_1,n = 2500)
 
-# Options at interception
+example_2 = straddle(S=23.65,K=22,T=29/365,r=0.03,q=0,sigma=0.7)
+example_2.calculate()
+payoff_diagram(example_2,n = 2500)
 
-option = spread(S=24.65,K1=27,K2=22,T=29/365,r=0.03,q=0,sigma=0.7,option_type='call')
-
-payoff_diagram(option,n = 2500)
-
-a = option.option_1
-b = option.option_2
-
-a.price - b.price # cost of the strategy
-
-# payoff
-St = 27
-b.K
-a.payoff(St)
-b.payoff(St)
-
-
-a.profit(St)
-b.profit(St)
-
-
-
-
-payoff_diagram(call(S=24.65,K=25,T=29/365,r=0.03,q=0,sigma=0.3),n = 2500)
-
-long_call.calculate()
-short_call.calculate()
+example_3 = spread(S=23.65,K1=22,K2=24,T=29/365,r=0.03,q=0,sigma=0.7,option_type='call')
+example_3.calculate()
+payoff_diagram(example_3,n = 2500)
