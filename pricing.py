@@ -1,3 +1,11 @@
+'''
+TODO:
+1. describe IV from current option prices
+2. Compare between options (costs, expected payoff) -> Optimization
+3. Currently assume hold to maturity. Calculate resold prices
+'''
+import os
+os.chdir('/Users/tinglam/Documents/GitHub/value_investing')
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -7,16 +15,10 @@ from scipy.stats import skewnorm
 from scipy.optimize import minimize
 import random
 import matplotlib.pyplot as plt
-
-'''
-TODO:
-1. describe the expected profit, probability of making profits, breakeven
-2. Compare between options (costs, expected payoff)
-3. describe IV from current option prices
-'''
+from option_data import option_data
 
 class black_scholes:
-    def __init__(self, S, K, T, r, q, IV):
+    def __init__(self, S, K, T, r, q, IV, position = 'long'):
         self.S = S
         self.K = K
         self.T = T
@@ -70,7 +72,10 @@ class black_scholes:
     def exposure(self): # Delta-adjusted notional value
         return self.S * self.delta / self.S
     
-    def plot_payoff(self,n=2500):
+    def profit(self,St):
+        return self.payoff(St) - self.price
+
+    def plot_profit(self,n=2500):
         pct_chg = np.random.normal(1, self.IV * self.T, n)
         ms_St = pct_chg * self.S
         ms_profit = self.profit(ms_St)
@@ -92,11 +97,62 @@ class black_scholes:
         print("Rho: " + str("{:.3f}".format(self.rho)) + " (per % of Interest Rate)")
         print("Leverage: " + str("{:.3f}".format(self.leverage)))
         print("Exposure: " + str("{:.3f}".format(self.exposure)))
+        
+    def short_position(self):
+        variables = ['price','delta','gamma','vega''theta','rho','leverage','exposure']
+        for i in variables:
+            try:
+                vars(self)[i] = vars(self)[i] * -1
+            except:
+                pass
+
+    def get_simulation(self, expected_price, std, skew, n=2500):
+        pct_chg = skewnorm.rvs(skew,loc = 0, scale = std,size=n)
+        ms_St = expected_price * (1+pct_chg)
+        ms_profit = self.profit(ms_St)
+        
+        simulation = pd.DataFrame({'St' : ms_St, 'Profit' : ms_profit}).sort_values('St').reset_index(drop = True)
+
+        def plot_St():
+            plt.hist(simulation['St'], density=True, bins=30)  # `density=False` would make counts
+            plt.ylabel('Probability')
+            plt.xlabel('St')
+            plt.grid()
+            plt.show()
+
+        def plot_profit():
+            fig, ax = plt.subplots()
+            ax.scatter(simulation['St'], simulation['Profit'],s = 5)
+            ax.set_xlabel('St')
+            ax.set_ylabel('Profit')
+            plt.grid()
+            plt.show()
+            
+        def forecasting_profit():
+            l = simulation['Profit']
+
+            profit_prob = len([1 for i in l if i > 0]) / len(l) 
+            print('Probability of making profit = ' + "{:.2f}".format(profit_prob*100) + '%')
+            
+            break_even_index = next(i for i,v in enumerate(sorted(l)) if v > 0)
+            break_even_St = simulation.sort_values('Profit').reset_index(drop=True)['St'][break_even_index]
+            
+            print('Break-even St = $' + "{:.3f}".format(break_even_St))
+            
+            print('Median Profit = $' + "{:.2f}".format(np.median(l)))
+            
+            print('Std of profit = ' + "{:.2f}".format(np.std(l)))
+            
+        
+        plot_St()
+        plot_profit()
+        forecasting_profit()
 
 class call(black_scholes):
-    def __init__(self, S, K, T, r, q, IV):
-        super().__init__(S, K, T, r, q, IV)
-        self.strategy_name = 'Call @ K = ' + str(K)
+    def __init__(self, S, K, T, r, q, IV, position='long'):
+        super().__init__(S, K, T, r, q, IV, position)
+        self.position = position
+        self.strategy_name = self.position.capitalize() + ' Call @ K = ' + str(K)
         
         self.price = black_scholes.price(self,'call')
         self.delta = black_scholes.delta(self,'call')
@@ -107,16 +163,21 @@ class call(black_scholes):
         self.leverage = black_scholes.leverage(self)
         self.exposure = black_scholes.exposure(self)
         
+        if self.position == 'short':
+            self.short_position()
+        
     def payoff(self,St):
-        return np.where(St > self.K, St - self.K, 0)
-    
+        position_adjust = -1 if self.position == 'short' else 1
+        return np.where(St > self.K, St - self.K, 0) * position_adjust
+
     def profit(self,St):
-        return np.where(St > self.K, St - self.K, 0) - self.price
+        return self.payoff(St) - self.price
 
 class put(black_scholes):
-    def __init__(self, S, K, T, r, q, IV):
-        super().__init__(S, K, T, r, q, IV)
-        self.strategy_name = 'Put @ K = ' + str(K)
+    def __init__(self, S, K, T, r, q, IV, position='long'):
+        super().__init__(S, K, T, r, q, IV, position)
+        self.position = position
+        self.strategy_name = self.position.capitalize() + ' Call @ K = ' + str(K)
         
         self.price = black_scholes.price(self,'put')
         self.delta = black_scholes.delta(self,'put')
@@ -126,20 +187,25 @@ class put(black_scholes):
         self.rho = black_scholes.rho(self,'put')
         self.leverage = black_scholes.leverage(self)
         self.exposure = black_scholes.exposure(self)
+        
+        if self.position == 'short':
+            self.short_position()
 
     def payoff(self,St):
-        return np.where(St < self.K, self.K - St, 0)
+        position_adjust = -1 if self.position == 'short' else 1
+        return np.where(St < self.K, self.K - St, 0) * position_adjust
     
     def profit(self,St):
-        return np.where(St < self.K, self.K - St, 0) - self.price
+        return self.payoff(St) - self.price
 
 class straddle(call,put):
-    def __init__(self, S, K, T, r, q, IV):
-        super().__init__(S, K, T, r, q, IV)
-        self.strategy_name = 'Straddle @ K = ' + str(K)
+    def __init__(self, S, K, T, r, q, IV, position='long'):
+        super().__init__(S, K, T, r, q, IV, position)
+        self.position = position
+        self.strategy_name = self.position.capitalize() + ' Straddle @ K = ' + str(K)
         
-        option_1 = call(S, K, T, r, q, IV) # Long Call
-        option_2 = put(S, K, T, r, q, IV) # Long Put
+        option_1 = call(S, K, T, r, q, IV, position)
+        option_2 = put(S, K, T, r, q, IV, position)
         
         self.option_1 = option_1
         self.option_2 = option_2
@@ -156,7 +222,7 @@ class straddle(call,put):
         return self.option_1.payoff(St) + self.option_2.payoff(St)
     
     def profit(self,St):
-        return self.option_1.payoff(St) + self.option_2.payoff(St) - self.price
+        return self.payoff(St) - self.price
 
 class spread(call,put):
     '''
@@ -195,57 +261,32 @@ class spread(call,put):
     def profit(self,St):
         return self.option_1.payoff(St) - self.option_2.payoff(St) - self.option_1.price + self.option_2.price
 
-class montecarlo:
-    def __init__(self, option, expected_price, std, skew, n=1000): #TODO:  calculate value when resold (add variable t)
-        self.option = option
-        self.expected_price = expected_price
-        self.std = std
-        self.skew = skew
-        self.n = n
-        self.simulation = self.get_simulation()
 
-    def get_simulation(self):
-        #sns.set_style('whitegrid')
-        #pct_chg = np.random.lognormal(sigma=self.sd,size=self.n)
-        pct_chg = skewnorm.rvs(self.skew,loc = 0, scale = 0.1,size=self.n)
-        ms_St = self.expected_price * (1+pct_chg)
-        ms_profit = self.option.profit(ms_St)
-        return pd.DataFrame({'St' : ms_St, 'Profit' : ms_profit}).sort_values('St').reset_index(drop = True)
-
-    def plot_St(self):
-        plt.hist(self.simulation['St'], density=True, bins=30)  # `density=False` would make counts
-        plt.ylabel('Probability')
-        plt.xlabel('St')
-        plt.grid()
-        plt.show()
-
-    def plot_payoff(self):
-        fig, ax = plt.subplots()
-        ax.scatter(self.simulation['St'], self.simulation['Profit'],s = 5)
-        ax.set_xlabel('St')
-        ax.set_ylabel('Profit')
-        plt.grid()
-        plt.show()
 
 """
-example_1 = call(S=530,K=540,T=29/365,r=0.03,q=0,IV=0.48)
+example_1 = call(S=530,K=540,T=29/365,r=0.03,q=0,IV=0.48,position='short')
 example_1.describe()
-example_1.plot_payoff(n = 2500)
+example_1.get_simulation(expected_price = 500, std = 0.1,skew = -5,n = 2500)
+
+
 
 example_2 = straddle(S=23.65,K=22,T=29/365,r=0.03,q=0,IV=0.7)
 example_2.describe()
-example_2.plot_payoff(n = 2500)
+example_2.get_simulation(expected_price = 23.65, std = 0.2,skew = -5,n = 2500)
+
 
 example_3 = spread(S=23.65,K1=22,K2=24,T=29/365,r=0.03,q=0,IV=0.7,option_type='call')
 example_3.describe()
-example_3.plot_payoff(n = 2500)
+example_3.plot_profit(n = 2500)
 """
 
 
 
-x = straddle(S=25.6,K=24,T=27/365,r=0.03,q=0,IV=0.6874)
+x = straddle(S=25.6,K=24,T=27/365,r=0,q=0,IV=0.6874,position = 'short')
+x.get_simulation(24.5,0.04,-3,500)
 x.describe()
-x.plot_payoff()
 
-montecarlo(option = x,expected_price = 24.5,std = 1.5, skew = -5, n=2500).plot_St()
-montecarlo(option = x,expected_price = 24.5,std = 1.5, skew = -5, n=2500).plot_payoff()
+
+
+y = spread(25,25,26,29/365,0,0,0.68,'call')
+y.get_simulation(25.5,0.1,-5,2500)
