@@ -1,11 +1,12 @@
 '''
 TODO:
-1. describe IV from current option prices
+1. Calculate IV from current option prices
 2. Compare between options (costs, expected payoff) -> Optimization
-3. Currently assume hold to maturity. Calculate resold prices
+3. Currently assume hold to maturity. Calculate resold prices (with MS simulation)
+4. Simulation for other strategies
 '''
 import os
-os.chdir('/Users/tinglam/Documents/GitHub/value_investing')
+os.chdir('/Users/tinglam/Documents/GitHub/options_trading_simulator')
 import pandas as pd
 import numpy as np
 import seaborn as sns
@@ -105,48 +106,6 @@ class black_scholes:
                 vars(self)[i] = vars(self)[i] * -1
             except:
                 pass
-
-    def get_simulation(self, expected_price, std, skew, n=2500):
-        pct_chg = skewnorm.rvs(skew,loc = 0, scale = std,size=n)
-        ms_St = expected_price * (1+pct_chg)
-        ms_profit = self.profit(ms_St)
-        
-        simulation = pd.DataFrame({'St' : ms_St, 'Profit' : ms_profit}).sort_values('St').reset_index(drop = True)
-
-        def plot_St():
-            plt.hist(simulation['St'], density=True, bins=30)  # `density=False` would make counts
-            plt.ylabel('Probability')
-            plt.xlabel('St')
-            plt.grid()
-            plt.show()
-
-        def plot_profit():
-            fig, ax = plt.subplots()
-            ax.scatter(simulation['St'], simulation['Profit'],s = 5)
-            ax.set_xlabel('St')
-            ax.set_ylabel('Profit')
-            plt.grid()
-            plt.show()
-            
-        def forecasting_profit():
-            l = simulation['Profit']
-
-            profit_prob = len([1 for i in l if i > 0]) / len(l) 
-            print('Probability of making profit = ' + "{:.2f}".format(profit_prob*100) + '%')
-            
-            break_even_index = next(i for i,v in enumerate(sorted(l)) if v > 0)
-            break_even_St = simulation.sort_values('Profit').reset_index(drop=True)['St'][break_even_index]
-            
-            print('Break-even St = $' + "{:.3f}".format(break_even_St))
-            
-            print('Median Profit = $' + "{:.2f}".format(np.median(l)))
-            
-            print('Std of profit = ' + "{:.2f}".format(np.std(l)))
-            
-        
-        plot_St()
-        plot_profit()
-        forecasting_profit()
 
 class call(black_scholes):
     def __init__(self, S, K, T, r, q, IV, position='long'):
@@ -261,6 +220,82 @@ class spread(call,put):
     def profit(self,St):
         return self.option_1.payoff(St) - self.option_2.payoff(St) - self.option_1.price + self.option_2.price
 
+def get_simulation(option, expected_price, std, skew, n=2500, Tt='maturity'):
+    
+    def simulate(option, expected_price, std, skew, n, Tt):
+        """Create a dataframe and perform monte carlo simulation.
+
+        Args:
+            option (pur or call object): The option object that was used in the simulation
+            expected_price (int): The expected price at T = Tt
+            std ([type]): [description] #TODO: its scale
+            skew (int): Skewness of St's distribution at T = Tt
+            n (int): Number of simulations to run
+            Tt (str): Time left (in years) before expiry when profits are simulated
+
+        Returns:
+            DataFrame: 2 columns: 'St' and 'Profit'
+        """            
+        pct_chg = skewnorm.rvs(skew,loc = 0, scale = std,size=n)
+        ms_St = expected_price * (1+pct_chg)
+        if Tt == 'maturity':
+            ms_profit = option.profit(ms_St)
+        else:
+            cost = option.price
+            option.T = Tt
+            option.S = ms_St
+            ms_profit = black_scholes.price(option,option_type=option.__class__.__name__) - cost
+        
+        return pd.DataFrame({'St' : ms_St, 'Profit' : ms_profit}).sort_values('St').reset_index(drop = True)
+
+    simulation = simulate(option=option, expected_price=expected_price, std=std, skew=skew, n=n, Tt=Tt)
+
+    def plot_St():
+        plt.hist(simulation['St'], density=True, bins=30)  # `density=False` would make counts
+        plt.ylabel('Probability')
+        plt.xlabel('St')
+        plt.grid()
+        plt.show()
+
+    def plot_profit():
+        fig, ax = plt.subplots()
+        ax.scatter(simulation['St'], simulation['Profit'],s = 5)
+        ax.set_xlabel('St')
+        ax.set_ylabel('Profit')
+        plt.grid()
+        plt.show()
+        
+    def forecasting_profit():
+        l = simulation['Profit']
+
+        profit_prob = len([1 for i in l if i > 0]) / len(l) 
+        print('Probability of making profit = ' + "{:.2f}".format(profit_prob*100) + '%')
+        
+        break_even_index = next(i for i,v in enumerate(sorted(l)) if v > 0)
+        break_even_St = simulation.sort_values('Profit').reset_index(drop=True)['St'][break_even_index]
+        
+        print('Break-even St = $' + "{:.3f}".format(break_even_St))
+        
+        print('Median Profit = $' + "{:.2f}".format(np.median(l)))
+        
+        print('Std of profit = ' + "{:.2f}".format(np.std(l)))
+        
+        test_K = [20,21,22,23,24,25,26,27,28,29]
+        test_profit_prob = []
+        for K in test_K:
+            test_option = put(option.S, K, option.T, option.r, option.q, option.IV, option.position)
+            test_df = simulate(test_option,expected_price, std, skew, n=n, Tt = Tt)
+            test_l = test_df['Profit']
+            test_profit_prob.append(len([1 for i in test_l if i > 0]) / len(test_l) )
+        best_K = test_K[test_profit_prob.index(max(test_profit_prob))]
+        
+        print('Best K = ' + str(best_K))
+        print(simulation)
+    
+    plot_St()
+    plot_profit()
+    forecasting_profit()
+
 
 
 """
@@ -278,15 +313,23 @@ example_2.get_simulation(expected_price = 23.65, std = 0.2,skew = -5,n = 2500)
 example_3 = spread(S=23.65,K1=22,K2=24,T=29/365,r=0.03,q=0,IV=0.7,option_type='call')
 example_3.describe()
 example_3.plot_profit(n = 2500)
-"""
 
 
 
-x = straddle(S=25.6,K=24,T=27/365,r=0,q=0,IV=0.6874,position = 'short')
-x.get_simulation(24.5,0.04,-3,500)
+x = put(S=23.9,K=23,T=26/365,r=0,q=0,IV=0.728,position='long')
+
+get_simulation(x,expected_price=23.9,std=0.06,skew=0, Tt=20/365)
+
 x.describe()
+y = put(S=24.2,K=23,T=25/365,r=0,q=0,IV=0.728,position='long')
+y.price-x.price
 
 
+x.get_simulation(expected_price=23.9,std=0.05,skew=5)
 
-y = spread(25,25,26,29/365,0,0,0.68,'call')
-y.get_simulation(25.5,0.1,-5,2500)
+#x.plot_profit()
+
+
+x.get_simulation(expected_price=23.9,std=0.06,skew=0, Tt=20/365)
+
+"""

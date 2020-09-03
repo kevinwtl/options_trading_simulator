@@ -36,5 +36,24 @@ def option_data(date,code):
     headers = ['Expiry','Contract','Opening Price','Daily High','Daily Low','Settlement Price','Chainge in Settlement Price','IV','Volume','OI','Change in OI']
     df = pd.DataFrame(my_list,columns = headers)
     
+    
+    
     return df
+
+df = option_data(date,code)
+
+df
+
+
+import calendar
+abbr_to_num = {name: num for num, name in enumerate(calendar.month_abbr) if num}
+
+abbr_to_num['Sep']
+
+'SEP'.capitalize()
+
+
+
+
+
 
