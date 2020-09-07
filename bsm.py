@@ -1,10 +1,11 @@
 '''
 TODO:
-1. Calculate IV from current option prices
+1. Calculate IV from current option prices ####
 2. Compare between options (costs, expected payoff) -> Optimization
 3. Currently assume hold to maturity. Calculate resold prices (with MS simulation)
 4. Simulation for other strategies
 '''
+
 import os
 os.chdir('/Users/tinglam/Documents/GitHub/options_trading_simulator')
 import pandas as pd
@@ -16,7 +17,7 @@ from scipy.stats import skewnorm
 from scipy.optimize import minimize
 import random
 import matplotlib.pyplot as plt
-from option_data import option_data
+from copy import deepcopy
 
 class black_scholes:
     def __init__(self, S, K, T, r, q, IV, position = 'long'):
@@ -29,11 +30,21 @@ class black_scholes:
         self.d1 = (np.log(S / K) + (r - q + 0.5 * IV ** 2) * T) / (IV * np.sqrt(T))
         self.d2 = (np.log(S / K) + (r - q - 0.5 * IV ** 2) * T) / (IV * np.sqrt(T))
 
-    def price(self,option_type):
+    def price(self,option_type, S = None):
+        """Calcaulate price of options.
+
+        Args:
+            option_type (str): Type of option. Either 'call' or 'put'.
+            S (float or int, optional): Spot price used to evaluate option price. Defaults to None.
+
+        Returns:
+            float: Price of option.
+        """        
+        S  = self.S if S == None else S # If S not provided, use S_0 as St
         if option_type == 'call':
-            price = self.S * np.exp(-self.q * self.T) * si.norm.cdf(self.d1, 0.0, 1.0) - self.K * np.exp(-self.r * self.T) * si.norm.cdf(self.d2, 0.0, 1.0)
+            price = S * np.exp(-self.q * self.T) * si.norm.cdf(self.d1, 0.0, 1.0) - self.K * np.exp(-self.r * self.T) * si.norm.cdf(self.d2, 0.0, 1.0)
         elif option_type == 'put':
-            price = self.K * np.exp(-self.r * self.T) * si.norm.cdf(-self.d2, 0.0, 1.0) - self.S * np.exp(-self.q * self.T) * si.norm.cdf(-self.d1, 0.0, 1.0)
+            price = self.K * np.exp(-self.r * self.T) * si.norm.cdf(-self.d2, 0.0, 1.0) - S * np.exp(-self.q * self.T) * si.norm.cdf(-self.d1, 0.0, 1.0)
         return price
 
     def delta(self,option_type):
@@ -100,7 +111,7 @@ class black_scholes:
         print("Exposure: " + str("{:.3f}".format(self.exposure)))
         
     def short_position(self):
-        variables = ['price','delta','gamma','vega''theta','rho','leverage','exposure']
+        variables = ['price','delta','gamma','vega','theta','rho','leverage','exposure']
         for i in variables:
             try:
                 vars(self)[i] = vars(self)[i] * -1
@@ -193,15 +204,17 @@ class spread(call,put):
         super().__init__(S, np.nan, T, r, q, IV)
         
         self.direction = 'Bull' if K1 < K2 else 'Bear'
+        self.option_type = option_type
         
-        if option_type == 'call':
+        if self.option_type == 'call':
             self.strategy_name = self.direction + ' Call Spread @ K1 = ' + str(K1) + ', K2 = ' + str(K2)
             option_1 = call(S, K1, T, r, q, IV) # Long call
             option_2 = call(S, K2, T, r, q, IV) # Short call
-        elif option_type == 'put':
+        elif self.option_type == 'put':
             self.strategy_name = self.direction + ' Put Spread @ K1 = ' + str(K1) + ', K2 = ' + str(K2)
             option_1 = put(S, K1, T, r, q, IV) # Long Put
             option_2 = put(S, K2, T, r, q, IV) # Short Put
+        
         
         self.option_1 = option_1
         self.option_2 = option_2     
@@ -234,18 +247,23 @@ def get_simulation(option, expected_price, std, skew, n=2500, Tt='maturity'):
             Tt (str): Time left (in years) before expiry when profits are simulated
 
         Returns:
-            DataFrame: 2 columns: 'St' and 'Profit'
+            DataFrame: Columns = ['St','Profit']
         """            
         pct_chg = skewnorm.rvs(skew,loc = 0, scale = std,size=n)
         ms_St = expected_price * (1+pct_chg)
-        if Tt == 'maturity':
-            ms_profit = option.profit(ms_St)
-        else:
-            cost = option.price
-            option.T = Tt
-            option.S = ms_St
-            ms_profit = black_scholes.price(option,option_type=option.__class__.__name__) - cost
         
+        if Tt == 'maturity': # If option will be held to maturity
+            ms_profit = option.profit(ms_St)
+        else: # If option will be resold at T = Tt
+            cost = option.price
+            constructor = globals()[option.__class__.__name__]
+            if option.__class__.__name__ == 'spread':
+                option_simulated = constructor(S=ms_St,K1=option.option_1.K,K2=option.option_2.K,T=Tt,r=option.r,q=option.q,IV=option.IV,option_type=option.option_type)
+            else:
+                option_simulated = constructor(S=ms_St,K=option.K,T=Tt,r=option.r,q=option.q,IV=option.IV,position=option.position)
+            
+            ms_profit = option_simulated.price - cost
+
         return pd.DataFrame({'St' : ms_St, 'Profit' : ms_profit}).sort_values('St').reset_index(drop = True)
 
     simulation = simulate(option=option, expected_price=expected_price, std=std, skew=skew, n=n, Tt=Tt)
@@ -267,7 +285,6 @@ def get_simulation(option, expected_price, std, skew, n=2500, Tt='maturity'):
         
     def forecasting_profit():
         l = simulation['Profit']
-
         profit_prob = len([1 for i in l if i > 0]) / len(l) 
         print('Probability of making profit = ' + "{:.2f}".format(profit_prob*100) + '%')
         
@@ -280,17 +297,23 @@ def get_simulation(option, expected_price, std, skew, n=2500, Tt='maturity'):
         
         print('Std of profit = ' + "{:.2f}".format(np.std(l)))
         
-        test_K = [20,21,22,23,24,25,26,27,28,29]
+        K_list  = np.concatenate([np.arange(5,10,0.25),np.arange(10,20,0.5),np.arange(20,50,1),np.arange(20,50,1),np.arange(50,200,2.5),np.arange(200,300,5),np.arange(300,1000,10)])
+        idx = (np.abs(K_list - option.S)).argmin()
+        test_K = list(K_list[idx-5:idx+6])
         test_profit_prob = []
-        for K in test_K:
-            test_option = put(option.S, K, option.T, option.r, option.q, option.IV, option.position)
-            test_df = simulate(test_option,expected_price, std, skew, n=n, Tt = Tt)
-            test_l = test_df['Profit']
-            test_profit_prob.append(len([1 for i in test_l if i > 0]) / len(test_l) )
-        best_K = test_K[test_profit_prob.index(max(test_profit_prob))]
         
-        print('Best K = ' + str(best_K))
-        print(simulation)
+        constructor = globals()[option.__class__.__name__]
+        if option.__class__.__name__ == 'spread':
+            pass
+        else:
+            for K in test_K:
+                test_option = constructor(option.S, K, option.T, option.r, option.q, option.IV, option.position)
+                test_df = simulate(test_option,expected_price, std, skew, n=n, Tt = Tt)
+                test_l = test_df['Profit']
+                test_profit_prob.append(len([1 for i in test_l if i > 0]) / len(test_l))
+                best_K = test_K[test_profit_prob.index(max(test_profit_prob))]
+            print('Best K = ' + str(best_K))
+
     
     plot_St()
     plot_profit()
@@ -299,14 +322,26 @@ def get_simulation(option, expected_price, std, skew, n=2500, Tt='maturity'):
 
 
 """
-example_1 = call(S=530,K=540,T=29/365,r=0.03,q=0,IV=0.48,position='short')
+example_1 = call(S=530,K=540,T=29/365,r=0.03,q=0,IV=0.48,position='long')
 example_1.describe()
-example_1.get_simulation(expected_price = 500, std = 0.1,skew = -5,n = 2500)
+get_simulation(example_1, expected_price = 50, std = 0.1,skew = -5,n = 2500,Tt = 10/365)
 
 
 
-example_2 = straddle(S=23.65,K=22,T=29/365,r=0.03,q=0,IV=0.7)
-example_2.describe()
+x = straddle(S=23.65,K=22,T=29/365,r=0.03,q=0,IV=0.7,position = 'short')
+x.describe()
+
+
+x1 = call(S=23.65,K=22,T=29/365,r=0.03,q=0,IV=0.7,position = 'short')
+x1.describe()
+
+x2 = put(S=23.65,K=22,T=29/365,r=0.03,q=0,IV=0.7,position = 'short')
+x2.describe()
+
+get_simulation(x,expected_price = 22,std=0.02,skew=0,n=2500,Tt = 10/365)
+
+
+
 example_2.get_simulation(expected_price = 23.65, std = 0.2,skew = -5,n = 2500)
 
 
@@ -318,7 +353,7 @@ example_3.plot_profit(n = 2500)
 
 x = put(S=23.9,K=23,T=26/365,r=0,q=0,IV=0.728,position='long')
 
-get_simulation(x,expected_price=23.9,std=0.06,skew=0, Tt=20/365)
+get_simulation(example_3,expected_price=23.9,std=0.16,skew=0, Tt=20/365)
 
 x.describe()
 y = put(S=24.2,K=23,T=25/365,r=0,q=0,IV=0.728,position='long')

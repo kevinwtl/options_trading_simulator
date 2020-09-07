@@ -1,14 +1,16 @@
 import os
 os.chdir('/Users/tinglam/Documents/GitHub/value_investing')
 import pandas as pd
+from pandas.tseries.offsets import BMonthEnd
 from bs4 import BeautifulSoup
 import requests
 import numpy as np
 import re
+import datetime
 
 
-date = '200902'
-code = 'MIU'
+date = '200904'
+code = 'TCH'
 
 def option_data(date,code):
     url = 'https://www.hkex.com.hk/eng/stat/dmstat/dayrpt/dqe{}.htm'.format(date)
@@ -36,24 +38,32 @@ def option_data(date,code):
     headers = ['Expiry','Contract','Opening Price','Daily High','Daily Low','Settlement Price','Chainge in Settlement Price','IV','Volume','OI','Change in OI']
     df = pd.DataFrame(my_list,columns = headers)
     
+    # Data Procesing
     
+    df['Contract Type'] = df['Contract'].str[-1]
+    df['Strike'] = df['Contract'].str[:-2].astype(float)
+
+    df['Expiry Year'] = ('20' + df['Expiry'].str[-2:]).astype(int)
+    df['Expiry Month'] = df['Expiry'].str[:3].apply(lambda x: datetime.datetime.strptime(x, "%b").month)
+    func = lambda x: BMonthEnd().rollforward(datetime.datetime(x['Expiry Year'],x['Expiry Month'],1))
+    df['Expiry Date'] = df.apply(func,axis=1)
+    df['T'] = (df['Expiry Date'] - datetime.datetime.today()).astype('timedelta64[D]')
     
     return df
 
 df = option_data(date,code)
 
-df
+
+def IV_implied(df,S,K,expiry='SEP20'):
+    # Currently use Call prices to estimate IV only
+    temp_df = df[(df['Strike'] == K) & (df['Expiry'] == expiry)]
+    T = temp_df['T'].iloc[0]
+    C = temp_df[temp_df['Contract Type'] == 'C']['Settlement Price']
+    P = temp_df[temp_df['Contract Type'] == 'P']['Settlement Price']
+    
+    IV = np.sqrt(2*np.pi/(T/365)) * float(C) / S
+    
+    return IV
 
 
-import calendar
-abbr_to_num = {name: num for num, name in enumerate(calendar.month_abbr) if num}
-
-abbr_to_num['Sep']
-
-'SEP'.capitalize()
-
-
-
-
-
-
+IV_implied(df,515,520,'SEP20')
