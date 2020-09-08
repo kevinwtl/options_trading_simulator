@@ -66,7 +66,7 @@ x = bsm.straddle(S,K,T,r,q,IV,position='short')
 
 x.describe()
 
-bsm.get_simulation(option = x,expected_price = 25, std = 0.03, skew = -2, n = 25000, Tt = 21/365)
+bsm.get_simulation(option = x,expected_price = 25, std = 0.3, skew = -2, n = 25000, Tt = 20/365)
 
 
 
