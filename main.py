@@ -17,7 +17,7 @@ x = bsm.call(S,K,T,r,q,IV,position='long')
 
 x.describe()
 
-bsm.get_simulation(option = x,expected_price = 515, std = 0.036, skew = 0, n = 2500, Tt = 21/365)
+bsm.get_simulation(option = x,expected_price = 515, std = 0.036, skew = 0, n = 2500, Tt = 20/365)
 
 
 
