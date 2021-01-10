@@ -1,7 +1,34 @@
 import os
 os.chdir('/Users/tinglam/Documents/GitHub/options_trading_simulator')
 import bsm
-import option_data
+#import option_data
+
+# 3690 HK Put
+S = 280
+K = 240
+T = 3/12
+r = 0
+q = 0
+IV = 0.54
+
+x = bsm.put(S,K,T,r,q,IV,position='long')
+
+x.describe()
+
+
+# 914 HK Put
+S = 48.55
+K = 60
+T = 200/365
+r = 0
+q = 0
+IV = 0.317
+
+x = bsm.call(S,K,T,r,q,IV,position='long')
+
+x.describe()
+
+bsm.get_simulation(option = x,expected_price = 53, std = 0.036, skew = 0, n = 2500, Tt = 60/365)
 
 
 
